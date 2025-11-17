@@ -310,9 +310,10 @@ def send_result_email(payload: dict):
         msg["From"] = MAIL_FROM
         msg["To"] = MAIL_TO
 
-        with smtplib.SMTP_SSL(MAIL_SMTP_HOST, MAIL_SMTP_PORT_SSL) as smtp:
-            smtp.login(MAIL_FROM, MAIL_APP_PASSWORD)
-            smtp.send_message(msg)
+    with smtplib.SMTP_SSL(MAIL_SMTP_HOST, MAIL_SMTP_PORT_SSL, timeout=5) as smtp:
+        smtp.login(MAIL_FROM, MAIL_APP_PASSWORD)
+        smtp.send_message(msg)
+
 
         return True, None
     except Exception as e:
@@ -776,4 +777,5 @@ def admin_export():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
