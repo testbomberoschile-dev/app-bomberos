@@ -105,7 +105,8 @@ def init_db():
 @app.before_first_request
 def setup_db():
     init_db()
-    def save_response(ip, ua, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci):
+
+def save_response(ip, ua, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
@@ -280,3 +281,4 @@ legend{padding:0 8px;color:#374151}
 </body>
 </html>
 """
+
