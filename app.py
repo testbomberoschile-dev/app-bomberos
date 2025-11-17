@@ -51,12 +51,12 @@ SCALE_LABELS = {
     "IMP": "Impulso y Control de Riesgo",
     "TEQ": "Trabajo en Equipo",
     "REM": "Regulación Emocional",
-    "SUS": "Autocuidado y Riesgo de Sustancias"
+    "SUS": "Autocuidado y Riesgo de Sustancias",
 }
 
 WEIGHTS = {"EST": 0.25, "IMP": 0.25, "TEQ": 0.20, "REM": 0.20, "SUS": 0.10}
 
-CONSISTENCY_PAIRS = [(1,2), (5,6), (9,10), (13,14), (17,18)]
+CONSISTENCY_PAIRS = [(1, 2), (5, 6), (9, 10), (13, 14), (17, 18)]
 
 # =======================
 # DB
@@ -64,27 +64,30 @@ CONSISTENCY_PAIRS = [(1,2), (5,6), (9,10), (13,14), (17,18)]
 def utcnow_iso():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+
 def init_db():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS responses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        created_at TEXT NOT NULL,
-        ip TEXT,
-        user_agent TEXT,
-        name TEXT,
-        rut TEXT,
-        email TEXT,
-        phone TEXT,
-        address TEXT,
-        answers_json TEXT NOT NULL,
-        scales_json TEXT NOT NULL,
-        total REAL NOT NULL,
-        verdict TEXT NOT NULL,
-        ci REAL NOT NULL
-    );
-    """)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            ip TEXT,
+            user_agent TEXT,
+            name TEXT,
+            rut TEXT,
+            email TEXT,
+            phone TEXT,
+            address TEXT,
+            answers_json TEXT NOT NULL,
+            scales_json TEXT NOT NULL,
+            total REAL NOT NULL,
+            verdict TEXT NOT NULL,
+            ci REAL NOT NULL
+        );
+        """
+    )
     con.commit()
 
     def ensure_column(col, type_):
@@ -95,48 +98,98 @@ def init_db():
             con.commit()
 
     for col, type_ in [
-        ("name","TEXT"),("rut","TEXT"),("email","TEXT"),("phone","TEXT"),("address","TEXT")
+        ("name", "TEXT"),
+        ("rut", "TEXT"),
+        ("email", "TEXT"),
+        ("phone", "TEXT"),
+        ("address", "TEXT"),
     ]:
         ensure_column(col, type_)
 
     con.close()
+
 
 # 👇 FIX PARA RENDER
 @app.before_first_request
 def setup_db():
     init_db()
 
-def save_response(ip, ua, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci):
+
+def save_response(
+    ip,
+    ua,
+    name,
+    rut,
+    email,
+    phone,
+    address,
+    answers_json,
+    scales_json,
+    total,
+    verdict,
+    ci,
+):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
-        """INSERT INTO responses
-        (created_at, ip, user_agent, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (utcnow_iso(), ip, ua, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci)
+        """
+        INSERT INTO responses
+        (created_at, ip, user_agent, name, rut, email, phone, address,
+         answers_json, scales_json, total, verdict, ci)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            utcnow_iso(),
+            ip,
+            ua,
+            name,
+            rut,
+            email,
+            phone,
+            address,
+            answers_json,
+            scales_json,
+            total,
+            verdict,
+            ci,
+        ),
     )
     con.commit()
     con.close()
 
+
 def fetch_all():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    cur.execute("""SELECT id, created_at, ip, user_agent, name, rut, email, phone, address,
-                          answers_json, scales_json, total, verdict, ci
-                   FROM responses ORDER BY id DESC""")
-    rows = cur.fetchall()
+    cur.execute(
+        """
+        SELECT id, created_at, ip, user_agent, name, rut, email, phone, address,
+               answers_json, scales_json, total, verdict, ci
+        FROM responses
+        ORDER BY id DESC
+        """
+    )
+    rows = con.fetchall()
     con.close()
     return rows
+
 
 def fetch_one(rid):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    cur.execute("""SELECT id, created_at, ip, user_agent, name, rut, email, phone, address,
-                          answers_json, scales_json, total, verdict, ci
-                   FROM responses WHERE id=?""", (rid,))
-    row = cur.fetchone()
+    cur.execute(
+        """
+        SELECT id, created_at, ip, user_agent, name, rut, email, phone, address,
+               answers_json, scales_json, total, verdict, ci
+        FROM responses
+        WHERE id=?
+        """,
+        (rid,),
+    )
+    row = con.fetchone()
     con.close()
     return row
+
 
 # =======================
 # SCORING
@@ -145,41 +198,55 @@ def likert_to_score(raw, reverse=False):
     val = 6 - raw if reverse else raw
     return (val - 1) / 4 * 100.0
 
+
 def scale_scores(answers):
     by_scale = {k: [] for k in SCALES}
     for q in QUESTIONS:
         r = answers.get(str(q["id"]))
-        if r is None: continue
+        if r is None:
+            continue
         by_scale[q["scale"]].append(likert_to_score(int(r), q["reverse"]))
     out = {}
     for sc, vals in by_scale.items():
-        out[sc] = sum(vals)/len(vals) if vals else 0.0
+        out[sc] = sum(vals) / len(vals) if vals else 0.0
     return out
 
+
 def overall_score(scale_dict):
-    return sum(scale_dict[s]*WEIGHTS[s] for s in SCALES)
+    return sum(scale_dict[s] * WEIGHTS[s] for s in SCALES)
+
 
 def consistency_index(answers):
     penalties = 0
-    for a,b in CONSISTENCY_PAIRS:
+    for a, b in CONSISTENCY_PAIRS:
         ra = int(answers.get(str(a), 3))
         rb = int(answers.get(str(b), 3))
         sa = likert_to_score(ra, reverse=False)
         sb = likert_to_score(rb, reverse=True)
         diff = abs(sa - sb)
-        if diff > 60: penalties += 20
-        elif diff > 40: penalties += 10
-        elif diff > 25: penalties += 5
+        if diff > 60:
+            penalties += 20
+        elif diff > 40:
+            penalties += 10
+        elif diff > 25:
+            penalties += 5
     return max(0, 100 - penalties)
+
 
 def decision_tree(scale_dict, total, ci):
     flags = []
-    if scale_dict["SUS"] < 60: flags.append("Riesgo en autocuidado/sustancias")
-    if scale_dict["IMP"] < 65: flags.append("Impulso y control de riesgo por debajo de lo esperado")
-    if scale_dict["EST"] < 65: flags.append("Tolerancia al estrés mejorable")
-    if scale_dict["TEQ"] < 65: flags.append("Trabajo en equipo/cadena de mando bajo")
-    if scale_dict["REM"] < 65: flags.append("Regulación emocional por debajo de lo esperado")
-    if ci < 60: flags.append("Baja consistencia de respuestas (revisar validez)")
+    if scale_dict["SUS"] < 60:
+        flags.append("Riesgo en autocuidado/sustancias")
+    if scale_dict["IMP"] < 65:
+        flags.append("Impulso y control de riesgo por debajo de lo esperado")
+    if scale_dict["EST"] < 65:
+        flags.append("Tolerancia al estrés mejorable")
+    if scale_dict["TEQ"] < 65:
+        flags.append("Trabajo en equipo/cadena de mando bajo")
+    if scale_dict["REM"] < 65:
+        flags.append("Regulación emocional por debajo de lo esperado")
+    if ci < 60:
+        flags.append("Baja consistencia de respuestas (revisar validez)")
 
     if ci < 50:
         verdict = "No válido (reaplicar)"
@@ -194,6 +261,7 @@ def decision_tree(scale_dict, total, ci):
 
     return verdict, flags
 
+
 # =======================
 # EMAIL
 # =======================
@@ -204,21 +272,21 @@ def send_result_email(payload: dict):
         lines.append(f"Fecha (UTC): {utcnow_iso()}")
         lines.append("")
         lines.append("DATOS DEL POSTULANTE")
-        lines.append(f"Nombre: {payload.get('name','')}")
-        lines.append(f"RUT: {payload.get('rut','')}")
-        lines.append(f"Correo: {payload.get('email','')}")
-        lines.append(f"Teléfono: {payload.get('phone','')}")
-        lines.append(f"Dirección: {payload.get('address','')}")
+        lines.append(f"Nombre: {payload.get('name', '')}")
+        lines.append(f"RUT: {payload.get('rut', '')}")
+        lines.append(f"Correo: {payload.get('email', '')}")
+        lines.append(f"Teléfono: {payload.get('phone', '')}")
+        lines.append(f"Dirección: {payload.get('address', '')}")
         lines.append("")
         lines.append("RESULTADOS")
-        lines.append(f"Puntaje total: {payload.get('total',0):.1f} / 100")
-        lines.append(f"Dictamen: {payload.get('verdict','')}")
-        lines.append(f"Consistencia (CI): {payload.get('ci',0):.0f} / 100")
+        lines.append(f"Puntaje total: {payload.get('total', 0):.1f} / 100")
+        lines.append(f"Dictamen: {payload.get('verdict', '')}")
+        lines.append(f"Consistencia (CI): {payload.get('ci', 0):.0f} / 100")
         lines.append("")
         lines.append("SUBESCALAS")
         scales = payload.get("scales", {})
         for k, label in SCALE_LABELS.items():
-            lines.append(f"- {label}: {float(scales.get(k,0)):.1f} / 100")
+            lines.append(f"- {label}: {float(scales.get(k, 0)):.1f} / 100")
         lines.append("")
         lines.append("RESPUESTAS")
         answers = payload.get("answers", {})
@@ -227,11 +295,11 @@ def send_result_email(payload: dict):
             lines.append(f"{q['id']:02d}. {q['text']}  => {r}")
         lines.append("")
         lines.append("TÉCNICO")
-        lines.append(f"IP: {payload.get('ip','')}")
-        lines.append(f"User-Agent: {payload.get('ua','')}")
+        lines.append(f"IP: {payload.get('ip', '')}")
+        lines.append(f"User-Agent: {payload.get('ua', '')}")
         body = "\n".join(lines)
 
-        subject = f"[Bomberos] Test: {payload.get('name','(sin nombre)')} – {payload.get('verdict','')}"
+        subject = f"[Bomberos] Test: {payload.get('name', '(sin nombre)')} – {payload.get('verdict', '')}"
         msg = MIMEText(body, _charset="utf-8")
         msg["Subject"] = subject
         msg["From"] = MAIL_FROM
@@ -245,7 +313,9 @@ def send_result_email(payload: dict):
     except Exception as e:
         print("EMAIL ERROR:", repr(e))
         return False, e
-        # =======================
+
+
+# =======================
 # UI BASE
 # =======================
 BASE = """
@@ -281,4 +351,3 @@ legend{padding:0 8px;color:#374151}
 </body>
 </html>
 """
-
