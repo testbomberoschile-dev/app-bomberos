@@ -118,7 +118,7 @@ def init_db():
     con.close()
 
 
-# Flask 3.x ya no tiene before_first_request: inicializamos la BD al cargar el módulo
+# Inicializar BD al cargar el módulo (compatible Flask 3)
 init_db()
 
 
@@ -271,6 +271,14 @@ def decision_tree(scale_dict, total, ci):
 # EMAIL
 # =======================
 def send_result_email(payload: dict):
+    """
+    Envía correo sólo si ENABLE_EMAIL=1 en variables de entorno.
+    Si está desactivado, no hace nada y no rompe la app.
+    """
+    if os.environ.get("ENABLE_EMAIL", "0") != "1":
+        # Email desactivado, salimos en silencio
+        return False, "Email disabled"
+
     try:
         lines = []
         lines.append("Nuevo test psicológico completado")
@@ -310,10 +318,10 @@ def send_result_email(payload: dict):
         msg["From"] = MAIL_FROM
         msg["To"] = MAIL_TO
 
-    with smtplib.SMTP_SSL(MAIL_SMTP_HOST, MAIL_SMTP_PORT_SSL, timeout=5) as smtp:
-        smtp.login(MAIL_FROM, MAIL_APP_PASSWORD)
-        smtp.send_message(msg)
-
+        # Timeout corto para no colgar el worker
+        with smtplib.SMTP_SSL(MAIL_SMTP_HOST, MAIL_SMTP_PORT_SSL, timeout=5) as smtp:
+            smtp.login(MAIL_FROM, MAIL_APP_PASSWORD)
+            smtp.send_message(msg)
 
         return True, None
     except Exception as e:
@@ -404,7 +412,7 @@ def index():
             ci,
         )
 
-                payload = {
+        payload = {
             "name": name,
             "rut": rut,
             "email": email,
@@ -418,12 +426,8 @@ def index():
             "ip": ip,
             "ua": ua,
         }
-
-        # En Render desactivamos el correo por defecto.
-        # Si quieres activarlo, define ENABLE_EMAIL=1 en las variables de entorno.
-        if os.environ.get("ENABLE_EMAIL", "0") == "1":
-            send_result_email(payload)
-
+        # El propio send_result_email decide si está habilitado por ENV
+        send_result_email(payload)
 
         body = render_template_string(
             """
@@ -777,5 +781,3 @@ def admin_export():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
