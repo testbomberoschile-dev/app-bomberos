@@ -429,71 +429,59 @@ def index():
         # El propio send_result_email decide si está habilitado por ENV
         send_result_email(payload)
 
+        # ⬇️ IMPORTANTE: aquí ya NO mostramos puntajes ni dictamen, solo mensaje elegante
         body = render_template_string(
             """
-            <h2>Resultado del test psicológico</h2>
-            <p><strong>Postulante:</strong> {{ name or "Sin nombre" }}</p>
-            <p><strong>Puntaje total:</strong> {{ "%.1f"|format(total) }} / 100</p>
-            <p><strong>Dictamen general:</strong> {{ verdict }}</p>
-            <p><strong>Índice de consistencia (CI):</strong> {{ "%.0f"|format(ci) }} / 100</p>
-
-            <h3>Subescalas</h3>
-            <div class="grid">
-            {% for code, label in scale_labels.items() %}
-              <div class="card">
-                <p><strong>{{ label }}</strong></p>
-                <p>{{ "%.1f"|format(scales[code]) }} / 100</p>
-              </div>
-            {% endfor %}
+            <h2>Cuestionario enviado correctamente</h2>
+            <div class="card">
+              <p>
+                Hemos recibido sus respuestas de manera satisfactoria. A partir de este momento,
+                su información será analizada con estricta confidencialidad por profesionales
+                especializados en evaluación psicológica y en procesos de selección para Bomberos.
+              </p>
+              <p>
+                El objetivo de este instrumento es aportar antecedentes para valorar de manera integral
+                sus recursos personales, emocionales y relacionales en relación con las exigencias propias
+                del servicio bomberil. Los resultados no se muestran directamente en esta plataforma
+                para resguardar su bienestar emocional y asegurar una interpretación responsable y contextualizada.
+              </p>
             </div>
-
-            {% if flags %}
-            <h3>Observaciones relevantes</h3>
-            <ul>
-            {% for f in flags %}
-              <li>{{ f }}</li>
-            {% endfor %}
-            </ul>
-            {% endif %}
 
             <h3>Declaración de honestidad</h3>
             <div class="card">
               <p>
-                El presente cuestionario ha sido respondido bajo el compromiso de honestidad total por parte del postulante.
-                Para los efectos de esta evaluación, se considera que las respuestas entregadas reflejan de manera fidedigna
-                su forma habitual de pensar, sentir y actuar, con un nivel de veracidad equivalente al 100% dentro de su mejor
-                juicio personal.
+                Al completar este cuestionario, se considera que usted ha respondido con el máximo nivel de honestidad
+                posible, reflejando de buena fe su forma habitual de pensar, sentir y actuar frente a distintas situaciones.
+                Para efectos de este proceso, las respuestas se asumen como veraces y coherentes con su experiencia personal,
+                constituyendo un compromiso de honestidad que es fundamental para la calidad y validez de la evaluación.
               </p>
               <p>
-                Esta declaración de honestidad es fundamental para resguardar la calidad del proceso de selección y la responsabilidad
-                ética que implica el desempeño bomberil frente a la comunidad, especialmente en contextos de alta exigencia emocional
-                y operativa.
+                Esta declaración de honestidad es especialmente relevante en el contexto bomberil, donde la confianza,
+                la transparencia y la responsabilidad ética son pilares esenciales para resguardar la seguridad propia,
+                la del equipo y la de la comunidad a la que se presta servicio.
               </p>
             </div>
 
-            <h3>Agradecimiento y próximo paso</h3>
+            <h3>Agradecimiento y próximos pasos</h3>
             <div class="card">
               <p>
-                Agradecemos sinceramente el tiempo y la seriedad dedicados a completar este instrumento de evaluación psicológica.
-                Sus respuestas serán revisadas por un/a profesional especializado/a, quien analizará la información de manera
-                confidencial y la integrará al proceso formal de evaluación para el ingreso a Bomberos.
+                Agradecemos sinceramente el tiempo, la disposición y la seriedad con que ha respondido este instrumento.
+                Sus antecedentes serán revisados por un/a profesional, quien integrará esta información con otras etapas
+                del proceso de selección (entrevistas, formación, evaluación médica u otros dispositivos que la institución
+                determine pertinentes).
               </p>
               <p>
-                En caso de ser necesario, se le contactará para profundizar en algunos aspectos mediante entrevista u otras
-                instancias complementarias, con el propósito de resguardar tanto su bienestar como la seguridad de la comunidad
-                a la que aspira servir.
+                En caso de que se requiera profundizar en algún aspecto, se le podrá contactar para continuar con la evaluación
+                mediante entrevistas u otras instancias complementarias. Todo este proceso tiene como finalidad resguardar
+                su bienestar y la seguridad de las personas a las que, eventualmente, usted podría llegar a asistir como Bombero/a.
               </p>
               <p>
-                Gracias por su interés y disposición para formar parte de una institución cuyo objetivo central es proteger la vida,
-                los bienes y la integridad de las personas.
+                Muchas gracias por su interés en formar parte de una institución cuyo propósito central es proteger la vida,
+                los bienes y la integridad de la comunidad.
               </p>
             </div>
 
             <p style="margin-top:16px;">
-              <em>Estos resultados son de carácter orientativo y deben ser complementados con entrevista y evaluación profesional.</em>
-            </p>
-
-            <p style="margin-top:12px;">
               <a href="{{ url_for('index') }}">Volver al inicio</a>
             </p>
             """,
@@ -508,8 +496,8 @@ def index():
 
         return render_template_string(
             BASE,
-            title="Resultado Test Bomberos",
-            header="Resultados del Test Psicológico para Postulantes a Bomberos",
+            title="Cuestionario enviado",
+            header="Evaluación psicológica para postulantes a Bomberos",
             body=body,
         )
 
