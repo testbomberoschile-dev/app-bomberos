@@ -456,9 +456,46 @@ def index():
             </ul>
             {% endif %}
 
-            <p>Estos resultados son referenciales y deben ser complementados con entrevista y evaluación profesional.</p>
+            <h3>Declaración de honestidad</h3>
+            <div class="card">
+              <p>
+                El presente cuestionario ha sido respondido bajo el compromiso de honestidad total por parte del postulante.
+                Para los efectos de esta evaluación, se considera que las respuestas entregadas reflejan de manera fidedigna
+                su forma habitual de pensar, sentir y actuar, con un nivel de veracidad equivalente al 100% dentro de su mejor
+                juicio personal.
+              </p>
+              <p>
+                Esta declaración de honestidad es fundamental para resguardar la calidad del proceso de selección y la responsabilidad
+                ética que implica el desempeño bomberil frente a la comunidad, especialmente en contextos de alta exigencia emocional
+                y operativa.
+              </p>
+            </div>
 
-            <p><a href="{{ url_for('index') }}">Volver al inicio</a></p>
+            <h3>Agradecimiento y próximo paso</h3>
+            <div class="card">
+              <p>
+                Agradecemos sinceramente el tiempo y la seriedad dedicados a completar este instrumento de evaluación psicológica.
+                Sus respuestas serán revisadas por un/a profesional especializado/a, quien analizará la información de manera
+                confidencial y la integrará al proceso formal de evaluación para el ingreso a Bomberos.
+              </p>
+              <p>
+                En caso de ser necesario, se le contactará para profundizar en algunos aspectos mediante entrevista u otras
+                instancias complementarias, con el propósito de resguardar tanto su bienestar como la seguridad de la comunidad
+                a la que aspira servir.
+              </p>
+              <p>
+                Gracias por su interés y disposición para formar parte de una institución cuyo objetivo central es proteger la vida,
+                los bienes y la integridad de las personas.
+              </p>
+            </div>
+
+            <p style="margin-top:16px;">
+              <em>Estos resultados son de carácter orientativo y deben ser complementados con entrevista y evaluación profesional.</em>
+            </p>
+
+            <p style="margin-top:12px;">
+              <a href="{{ url_for('index') }}">Volver al inicio</a>
+            </p>
             """,
             name=name,
             total=total,
