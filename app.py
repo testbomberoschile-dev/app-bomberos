@@ -118,9 +118,8 @@ def init_db():
     con.close()
 
 
-@app.before_first_request
-def setup_db():
-    init_db()
+# Flask 3.x ya no tiene before_first_request: inicializamos la BD al cargar el módulo
+init_db()
 
 
 def save_response(
@@ -194,7 +193,7 @@ def fetch_one(rid):
         """,
         (rid,),
     )
-    row = con.fetchone()
+    row = cur.fetchone()
     con.close()
     return row
 
