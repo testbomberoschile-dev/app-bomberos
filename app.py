@@ -1,4 +1,10 @@
-import os, json, sqlite3, datetime, csv, io, smtplib
+import os
+import json
+import sqlite3
+import datetime
+import csv
+import io
+import smtplib
 from email.mime.text import MIMEText
 from flask import (
     Flask,
@@ -48,7 +54,7 @@ QUESTIONS = [
     {"id": 15, "text": "Tras un incidente crítico, aplico técnicas de autocuidado (respirar, pausar, hablarlo).", "scale": "REM", "reverse": False},
     {"id": 16, "text": "Eventos duros me desestabilizan por varios días.", "scale": "REM", "reverse": True},
     {"id": 17, "text": "No consumo alcohol u otras sustancias antes o durante un turno.", "scale": "SUS", "reverse": False},
-    {"id": 18, "text": "Uso alcohol u otras sustancias para “bajar” después de situaciones difíciles.", "scale": "SUS", "reverse": True},
+    {"id": 18, "text": "Uso alcohol u otras sustancias para 'bajar' después de situaciones difíciles.", "scale": "SUS", "reverse": True},
     {"id": 19, "text": "Duermo y me alimento de forma adecuada para rendir.", "scale": "SUS", "reverse": False},
     {"id": 20, "text": "Últimamente mi consumo de alcohol u otras sustancias ha aumentado.", "scale": "SUS", "reverse": True},
 ]
@@ -70,11 +76,11 @@ CONSISTENCY_PAIRS = [(1, 2), (5, 6), (9, 10), (13, 14), (17, 18)]
 # =======================
 # DB
 # =======================
-def utcnow_iso():
+def utcnow_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
-def init_db():
+def init_db() -> None:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
@@ -99,7 +105,7 @@ def init_db():
     )
     con.commit()
 
-    def ensure_column(col, type_):
+    def ensure_column(col: str, type_: str) -> None:
         cur.execute("PRAGMA table_info('responses')")
         cols = [c[1] for c in cur.fetchall()]
         if col not in cols:
@@ -118,24 +124,24 @@ def init_db():
     con.close()
 
 
-# Inicializar BD al cargar el módulo (compatible Flask 3)
+# Inicializar BD al importar (compatible Flask 3)
 init_db()
 
 
 def save_response(
-    ip,
-    ua,
-    name,
-    rut,
-    email,
-    phone,
-    address,
-    answers_json,
-    scales_json,
-    total,
-    verdict,
-    ci,
-):
+    ip: str,
+    ua: str,
+    name: str,
+    rut: str,
+    email: str,
+    phone: str,
+    address: str,
+    answers_json: str,
+    scales_json: str,
+    total: float,
+    verdict: str,
+    ci: float,
+) -> None:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
@@ -181,7 +187,7 @@ def fetch_all():
     return rows
 
 
-def fetch_one(rid):
+def fetch_one(rid: int):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
@@ -200,12 +206,12 @@ def fetch_one(rid):
 # =======================
 # SCORING
 # =======================
-def likert_to_score(raw, reverse=False):
+def likert_to_score(raw: int, reverse: bool = False) -> float:
     val = 6 - raw if reverse else raw
     return (val - 1) / 4 * 100.0
 
 
-def scale_scores(answers):
+def scale_scores(answers: dict) -> dict:
     by_scale = {k: [] for k in SCALES}
     for q in QUESTIONS:
         r = answers.get(str(q["id"]))
@@ -218,11 +224,11 @@ def scale_scores(answers):
     return out
 
 
-def overall_score(scale_dict):
+def overall_score(scale_dict: dict) -> float:
     return sum(scale_dict[s] * WEIGHTS[s] for s in SCALES)
 
 
-def consistency_index(answers):
+def consistency_index(answers: dict) -> float:
     penalties = 0
     for a, b in CONSISTENCY_PAIRS:
         ra = int(answers.get(str(a), 3))
@@ -239,7 +245,7 @@ def consistency_index(answers):
     return max(0, 100 - penalties)
 
 
-def decision_tree(scale_dict, total, ci):
+def decision_tree(scale_dict: dict, total: float, ci: float):
     flags = []
     if scale_dict["SUS"] < 60:
         flags.append("Riesgo en autocuidado/sustancias")
@@ -276,7 +282,6 @@ def send_result_email(payload: dict):
     Si está desactivado, no hace nada y no rompe la app.
     """
     if os.environ.get("ENABLE_EMAIL", "0") != "1":
-        # Email desactivado, salimos en silencio
         return False, "Email disabled"
 
     try:
@@ -318,7 +323,6 @@ def send_result_email(payload: dict):
         msg["From"] = MAIL_FROM
         msg["To"] = MAIL_TO
 
-        # Timeout corto para no colgar el worker
         with smtplib.SMTP_SSL(MAIL_SMTP_HOST, MAIL_SMTP_PORT_SSL, timeout=5) as smtp:
             smtp.login(MAIL_FROM, MAIL_APP_PASSWORD)
             smtp.send_message(msg)
@@ -378,6 +382,11 @@ def index():
         phone = (request.form.get("phone") or "").strip()
         address = (request.form.get("address") or "").strip()
 
+        # Validar casilla de honestidad
+        honesty = request.form.get("honesty")
+        if not honesty:
+            return "Debe declarar que responde con honestidad antes de enviar el cuestionario.", 400
+
         answers = {}
         for q in QUESTIONS:
             key = f"q{q['id']}"
@@ -426,10 +435,9 @@ def index():
             "ip": ip,
             "ua": ua,
         }
-        # El propio send_result_email decide si está habilitado por ENV
         send_result_email(payload)
 
-        # ⬇️ IMPORTANTE: aquí ya NO mostramos puntajes ni dictamen, solo mensaje elegante
+        # Mensaje final SIN mostrar resultados ni aptitud
         body = render_template_string(
             """
             <h2>Cuestionario enviado correctamente</h2>
@@ -450,10 +458,11 @@ def index():
             <h3>Declaración de honestidad</h3>
             <div class="card">
               <p>
-                Al completar este cuestionario, se considera que usted ha respondido con el máximo nivel de honestidad
-                posible, reflejando de buena fe su forma habitual de pensar, sentir y actuar frente a distintas situaciones.
-                Para efectos de este proceso, las respuestas se asumen como veraces y coherentes con su experiencia personal,
-                constituyendo un compromiso de honestidad que es fundamental para la calidad y validez de la evaluación.
+                Al completar este cuestionario y marcar la casilla de honestidad, se considera que usted ha respondido
+                con el máximo nivel de honestidad posible, reflejando de buena fe su forma habitual de pensar, sentir
+                y actuar frente a distintas situaciones. Para efectos de este proceso, las respuestas se asumen como
+                veraces y coherentes con su experiencia personal, constituyendo un compromiso de honestidad fundamental
+                para la calidad y validez de la evaluación.
               </p>
               <p>
                 Esta declaración de honestidad es especialmente relevante en el contexto bomberil, donde la confianza,
@@ -485,13 +494,6 @@ def index():
               <a href="{{ url_for('index') }}">Volver al inicio</a>
             </p>
             """,
-            name=name,
-            total=total,
-            verdict=verdict,
-            ci=ci,
-            scales=scales,
-            flags=flags,
-            scale_labels=SCALE_LABELS,
         )
 
         return render_template_string(
@@ -548,6 +550,16 @@ def index():
                 <label><input type="radio" name="q{{ q.id }}" value="5"> 5 - Siempre</label>
               </div>
             {% endfor %}
+          </fieldset>
+
+          <fieldset>
+            <legend>Compromiso de honestidad</legend>
+            <div class="card">
+              <label>
+                <input type="checkbox" name="honesty" value="1" required>
+                Declaro que he respondido este cuestionario de manera honesta y responsable, reflejando mi forma habitual de pensar, sentir y actuar.
+              </label>
+            </div>
           </fieldset>
 
           <p style="margin-top:16px;">
@@ -667,7 +679,7 @@ def admin_panel():
 
 
 @app.route("/admin/view/<int:rid>")
-def admin_view(rid):
+def admin_view(rid: int):
     guard = require_admin()
     if guard:
         return guard
