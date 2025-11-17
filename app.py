@@ -6,13 +6,12 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 # CONFIG
 # =======================
 SECRET_KEY = os.environ.get("SECRET_KEY", "cambia-esto-en-produccion")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")  # cámbialo en producción
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 DB_PATH = os.environ.get("DB_PATH", "data.db")
 
-# >>> Correo de destino y credenciales (puedes moverlos a variables de entorno)
 MAIL_TO = os.environ.get("MAIL_TO", "testbomberoschile@gmail.com")
 MAIL_FROM = os.environ.get("MAIL_FROM", "testbomberoschile@gmail.com")
-MAIL_APP_PASSWORD = os.environ.get("MAIL_APP_PASSWORD", "amgw mcvy ksbc ekgn")  # <- contraseña de aplicación Gmail
+MAIL_APP_PASSWORD = os.environ.get("MAIL_APP_PASSWORD", "amgw mcvy ksbc ekgn")
 MAIL_SMTP_HOST = "smtp.gmail.com"
 MAIL_SMTP_PORT_SSL = 465
 
@@ -44,7 +43,9 @@ QUESTIONS = [
     {"id": 19, "text": "Duermo y me alimento de forma adecuada para rendir.", "scale": "SUS", "reverse": False},
     {"id": 20, "text": "Últimamente mi consumo de alcohol u otras sustancias ha aumentado.", "scale": "SUS", "reverse": True},
 ]
+
 SCALES = ["EST", "IMP", "TEQ", "REM", "SUS"]
+
 SCALE_LABELS = {
     "EST": "Tolerancia al Estrés",
     "IMP": "Impulso y Control de Riesgo",
@@ -52,14 +53,15 @@ SCALE_LABELS = {
     "REM": "Regulación Emocional",
     "SUS": "Autocuidado y Riesgo de Sustancias"
 }
+
 WEIGHTS = {"EST": 0.25, "IMP": 0.25, "TEQ": 0.20, "REM": 0.20, "SUS": 0.10}
+
 CONSISTENCY_PAIRS = [(1,2), (5,6), (9,10), (13,14), (17,18)]
 
 # =======================
 # DB
 # =======================
 def utcnow_iso():
-    # Fecha "aware" en UTC (sin warnings)
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 def init_db():
@@ -84,20 +86,26 @@ def init_db():
     );
     """)
     con.commit()
-    # Intentar migrar si faltan columnas
+
     def ensure_column(col, type_):
         cur.execute("PRAGMA table_info('responses')")
         cols = [c[1] for c in cur.fetchall()]
         if col not in cols:
             cur.execute(f"ALTER TABLE responses ADD COLUMN {col} {type_};")
             con.commit()
+
     for col, type_ in [
         ("name","TEXT"),("rut","TEXT"),("email","TEXT"),("phone","TEXT"),("address","TEXT")
     ]:
         ensure_column(col, type_)
+
     con.close()
 
-def save_response(ip, ua, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci):
+# 👇 FIX PARA RENDER
+@app.before_first_request
+def setup_db():
+    init_db()
+    def save_response(ip, ua, name, rut, email, phone, address, answers_json, scales_json, total, verdict, ci):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
@@ -189,12 +197,7 @@ def decision_tree(scale_dict, total, ci):
 # EMAIL
 # =======================
 def send_result_email(payload: dict):
-    """
-    Envía un correo con el detalle del test.
-    payload contiene: name, rut, email, phone, address, total, verdict, ci, scales(dict), answers(dict), ip, ua
-    """
     try:
-        # Construir el cuerpo
         lines = []
         lines.append("Nuevo test psicológico completado")
         lines.append(f"Fecha (UTC): {utcnow_iso()}")
@@ -227,14 +230,12 @@ def send_result_email(payload: dict):
         lines.append(f"User-Agent: {payload.get('ua','')}")
         body = "\n".join(lines)
 
-        # Construir mensaje
         subject = f"[Bomberos] Test: {payload.get('name','(sin nombre)')} – {payload.get('verdict','')}"
         msg = MIMEText(body, _charset="utf-8")
         msg["Subject"] = subject
         msg["From"] = MAIL_FROM
         msg["To"] = MAIL_TO
 
-        # Enviar
         with smtplib.SMTP_SSL(MAIL_SMTP_HOST, MAIL_SMTP_PORT_SSL) as smtp:
             smtp.login(MAIL_FROM, MAIL_APP_PASSWORD)
             smtp.send_message(msg)
@@ -243,8 +244,7 @@ def send_result_email(payload: dict):
     except Exception as e:
         print("EMAIL ERROR:", repr(e))
         return False, e
-
-# =======================
+        # =======================
 # UI BASE
 # =======================
 BASE = """
@@ -262,217 +262,4 @@ h1{margin:0;font-size:20px}
 .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px}
 .btn{background:#1d4ed8;color:#fff;border:none;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:16px}
 footer{color:#6b7280;font-size:12px;margin-top:24px}
-a{color:#1d4ed8;text-decoration:none}
-input[type=text], input[type=email], input[type=tel]{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;margin:6px 0;}
-fieldset{border:1px solid #eee;border-radius:12px;padding:12px}
-legend{padding:0 8px;color:#374151}
-</style></head><body>
-<header><h1>{{ header }}</h1></header>
-<main>
-{{ body|safe }}
-<footer><p><strong>Uso responsable:</strong> Herramienta orientativa. No reemplaza evaluación profesional.</p></footer>
-</main></body></html>
-"""
-
-def render_page(title, header, body_html):
-    return render_template_string(BASE, title=title, header=header, body=body_html)
-
-# =======================
-# RUTAS PÚBLICAS
-# =======================
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        # 0) Datos personales
-        name = request.form.get("name","").strip()
-        rut = request.form.get("rut","").strip()
-        email = request.form.get("email","").strip()
-        phone = request.form.get("phone","").strip()
-        address = request.form.get("address","").strip()
-
-        # 1) Respuestas
-        answers = {k: v for k, v in request.form.items() if k.isdigit()}
-
-        # 2) Calcular (no mostrar al usuario)
-        sc = scale_scores(answers)
-        total = overall_score(sc)
-        ci = consistency_index(answers)
-        verdict, flags = decision_tree(sc, total, ci)
-
-        # 3) Guardar en DB
-        save_response(
-            ip=request.headers.get("X-Forwarded-For", request.remote_addr),
-            ua=request.headers.get("User-Agent",""),
-            name=name, rut=rut, email=email, phone=phone, address=address,
-            answers_json=json.dumps(answers, ensure_ascii=False),
-            scales_json=json.dumps(sc, ensure_ascii=False),
-            total=total, verdict=verdict, ci=ci
-        )
-
-        # 4) Enviar correo al encargado
-        ok, err = send_result_email({
-            "name": name, "rut": rut, "email": email, "phone": phone, "address": address,
-            "answers": answers, "scales": sc, "total": total, "verdict": verdict, "ci": ci,
-            "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
-            "ua": request.headers.get("User-Agent","")
-        })
-        if not ok:
-            # No detenemos el flujo del usuario, pero lo registramos en consola
-            print("ADVERTENCIA: no se pudo enviar el correo:", err)
-
-        # 5) Redirigir a gracias
-        return redirect(url_for("gracias"))
-
-    # GET: Formulario
-    options = [(1,"Nunca"),(2,"Rara vez"),(3,"A veces"),(4,"Frecuentemente"),(5,"Siempre")]
-    scale_labels = SCALE_LABELS
-
-    body = []
-    body.append('<p class="badge">Versión demo · No diagnóstico</p>')
-    body.append('<form method="post">')
-
-    # Datos personales
-    body.append('<fieldset class="card"><legend>Datos del postulante</legend>')
-    body.append('<label>Nombre completo</label><input type="text" name="name" required>')
-    body.append('<label>RUT</label><input type="text" name="rut" required placeholder="12.345.678-9">')
-    body.append('<label>Correo</label><input type="email" name="email" required>')
-    body.append('<label>Número de contacto</label><input type="tel" name="phone" required>')
-    body.append('<label>Dirección</label><input type="text" name="address" required>')
-    body.append('</fieldset>')
-
-    # Preguntas
-    body.append('<div class="grid">')
-    for q in QUESTIONS:
-        body.append('<div class="card">')
-        body.append(f'<p><strong>{q["id"]}.</strong> {q["text"]}</p>')
-        for i,label in options:
-            body.append(f'<label><input type="radio" name="{q["id"]}" value="{i}" required> {i} — {label}</label><br>')
-        body.append(f'<div style="font-size:12px;color:#6b7280;margin-top:6px">Dimensión: {scale_labels[q["scale"]]}</div>')
-        body.append('</div>')
-    body.append('</div>')
-
-    # Consentimiento
-    body.append('<div style="margin:16px 0;">')
-    body.append('<label><input type="checkbox" required> Confirmo que respondo de forma voluntaria y honesta. '
-                'Entiendo que esto no reemplaza evaluación profesional y autorizo el uso anónimo de mis respuestas con fines de admisión y mejora del proceso.</label>')
-    body.append('</div>')
-
-    body.append('<button class="btn" type="submit">Enviar</button></form>')
-    return render_page("Test Psicológico Bomberos","Evaluación Psicológica Inicial – Postulación a Bomberos","".join(body))
-
-@app.route("/gracias")
-def gracias():
-    body = """
-    <div class="card">
-      <p><strong>¡Gracias!</strong> Hemos recibido tu test correctamente.</p>
-      <p>El equipo de admisión revisará la información de forma privada.</p>
-    </div>
-    """
-    return render_page("Gracias","Gracias por completar el test", body)
-
-# =======================
-# PANEL PRIVADO
-# =======================
-def login_required(fn):
-    from functools import wraps
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("auth"):
-            return redirect(url_for("login"))
-        return fn(*args, **kwargs)
-    return wrapper
-
-@app.route("/login", methods=["GET","POST"])
-def login():
-    if request.method == "POST":
-        pw = request.form.get("password","")
-        if pw == ADMIN_PASSWORD:
-            session["auth"] = True
-            return redirect(url_for("admin"))
-    body = """
-    <form method="post" class="card">
-      <p>Ingresa la contraseña de administrador:</p>
-      <input type="password" name="password" required>
-      <button class="btn" type="submit">Entrar</button>
-    </form>
-    """
-    return render_page("Login","Acceso privado", body)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-@app.route("/admin")
-@login_required
-def admin():
-    rows = fetch_all()
-    html = ['<div class="card" style="overflow:auto"><table border="0" cellpadding="6" cellspacing="0">']
-    html.append("<tr><th>ID</th><th>Fecha (UTC)</th><th>IP</th><th>Nombre</th><th>RUT</th><th>Total</th><th>Dictamen</th><th>CI</th><th>Ver</th></tr>")
-    for r in rows:
-        (rid, created_at, ip, ua, name, rut, email, phone, address,
-         answers_json, scales_json, total, verdict, ci) = r
-        html.append(f"<tr><td>{rid}</td><td>{created_at}</td><td>{ip or ''}</td>"
-                    f"<td>{name or ''}</td><td>{rut or ''}</td><td>{float(total):.1f}</td>"
-                    f"<td>{verdict}</td><td>{float(ci):.0f}</td>"
-                    f"<td><a href='/admin/ver/{rid}'>Detalle</a></td></tr>")
-    html.append("</table></div>")
-    html.append("<p><a class='btn' href='/admin/export'>Descargar CSV</a> &nbsp; <a href='/logout'>Salir</a></p>")
-    return render_page("Panel","Resultados recibidos", "".join(html))
-
-@app.route("/admin/ver/<int:rid>")
-@login_required
-def admin_ver(rid):
-    row = fetch_one(rid)
-    if not row: abort(404)
-    (rid, created_at, ip, ua, name, rut, email, phone, address,
-     answers_json, scales_json, total, verdict, ci) = row
-    answers = json.loads(answers_json)
-    scales = json.loads(scales_json)
-    parts = [f"<div class='card'><p><strong>ID:</strong> {rid}</p>"
-             f"<p><strong>Fecha UTC:</strong> {created_at}</p>"
-             f"<p><strong>IP:</strong> {ip or ''}</p>"
-             f"<p><strong>Agente:</strong> {ua or ''}</p>"
-             f"<p><strong>Nombre:</strong> {name or ''}</p>"
-             f"<p><strong>RUT:</strong> {rut or ''}</p>"
-             f"<p><strong>Correo:</strong> {email or ''}</p>"
-             f"<p><strong>Teléfono:</strong> {phone or ''}</p>"
-             f"<p><strong>Dirección:</strong> {address or ''}</p>"
-             f"<p><strong>Total:</strong> {float(total):.1f}</p>"
-             f"<p><strong>Dictamen:</strong> {verdict}</p>"
-             f"<p><strong>Consistencia:</strong> {float(ci):.0f}</p></div>"]
-    parts.append("<h3>Subescalas</h3><div class='grid'>")
-    for k,label in SCALE_LABELS.items():
-        val = float(scales.get(k,0))
-        parts.append(f"<div class='card'><strong>{label}</strong><div style='font-size:12px;color:#6b7280;margin-top:6px'>{val:.1f} / 100</div></div>")
-    parts.append("</div>")
-    parts.append("<h3>Respuestas</h3><div class='card'><ol>")
-    for q in QUESTIONS:
-        r = answers.get(str(q["id"]), "?")
-        parts.append(f"<li>({q['id']}) {q['text']} — <strong>{r}</strong></li>")
-    parts.append("</ol></div>")
-    parts.append("<p><a href='/admin'>Volver</a></p>")
-    return render_page(f"Detalle {rid}","Detalle de respuesta","".join(parts))
-
-@app.route("/admin/export")
-@login_required
-def admin_export():
-    rows = fetch_all()
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["id","created_at","ip","user_agent","name","rut","email","phone","address","answers_json","scales_json","total","verdict","ci"])
-    for r in rows:
-        writer.writerow(r)
-    mem = io.BytesIO(output.getvalue().encode("utf-8"))
-    resp = make_response(mem.getvalue())
-    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
-    resp.headers["Content-Disposition"] = "attachment; filename=responses.csv"
-    return resp
-
-# =======================
-# ARRANQUE
-# =======================
-if __name__ == "__main__":
-    init_db()
-    # host 0.0.0.0 para que funcione desde otros dispositivos en tu red / servidores
-    app.run(host="0.0.0.0", port=5000, debug=True)
+a{color:#1d4евег
