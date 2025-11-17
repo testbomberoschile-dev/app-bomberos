@@ -403,7 +403,7 @@ def index():
             ci,
         )
 
-        payload = {
+                payload = {
             "name": name,
             "rut": rut,
             "email": email,
@@ -417,7 +417,12 @@ def index():
             "ip": ip,
             "ua": ua,
         }
-        send_result_email(payload)
+
+        # En Render desactivamos el correo por defecto.
+        # Si quieres activarlo, define ENABLE_EMAIL=1 en las variables de entorno.
+        if os.environ.get("ENABLE_EMAIL", "0") == "1":
+            send_result_email(payload)
+
 
         body = render_template_string(
             """
@@ -771,3 +776,4 @@ def admin_export():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
