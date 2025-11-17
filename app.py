@@ -1,6 +1,15 @@
 import os, json, sqlite3, datetime, csv, io, smtplib
 from email.mime.text import MIMEText
-from flask import Flask, render_template_string, request, redirect, url_for, session, abort, make_response
+from flask import (
+    Flask,
+    render_template_string,
+    request,
+    redirect,
+    url_for,
+    session,
+    abort,
+    make_response,
+)
 
 # =======================
 # CONFIG
@@ -109,7 +118,6 @@ def init_db():
     con.close()
 
 
-# 👇 FIX PARA RENDER
 @app.before_first_request
 def setup_db():
     init_db()
@@ -190,7 +198,6 @@ def fetch_one(rid):
     con.close()
     return row
 
-
 # =======================
 # SCORING
 # =======================
@@ -261,7 +268,6 @@ def decision_tree(scale_dict, total, ci):
 
     return verdict, flags
 
-
 # =======================
 # EMAIL
 # =======================
@@ -314,7 +320,6 @@ def send_result_email(payload: dict):
         print("EMAIL ERROR:", repr(e))
         return False, e
 
-
 # =======================
 # UI BASE
 # =======================
@@ -340,6 +345,7 @@ a{color:#1d4ed8;text-decoration:none}
 input[type=text], input[type=email], input[type=tel]{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;margin:6px 0;}
 fieldset{border:1px solid #eee;border-radius:12px;padding:12px}
 legend{padding:0 8px;color:#374151}
+label{display:block;margin:4px 0;}
 </style>
 </head>
 <body>
@@ -351,3 +357,418 @@ legend{padding:0 8px;color:#374151}
 </body>
 </html>
 """
+
+# =======================
+# ROUTES
+# =======================
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        rut = (request.form.get("rut") or "").strip()
+        email = (request.form.get("email") or "").strip()
+        phone = (request.form.get("phone") or "").strip()
+        address = (request.form.get("address") or "").strip()
+
+        answers = {}
+        for q in QUESTIONS:
+            key = f"q{q['id']}"
+            val = request.form.get(key)
+            if not val:
+                return "Falta responder todas las preguntas.", 400
+            answers[str(q["id"])] = val
+
+        scales = scale_scores(answers)
+        total = overall_score(scales)
+        ci = consistency_index(answers)
+        verdict, flags = decision_tree(scales, total, ci)
+
+        answers_json = json.dumps(answers, ensure_ascii=False)
+        scales_json = json.dumps(scales, ensure_ascii=False)
+
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+        ua = request.headers.get("User-Agent", "")
+
+        save_response(
+            ip,
+            ua,
+            name,
+            rut,
+            email,
+            phone,
+            address,
+            answers_json,
+            scales_json,
+            total,
+            verdict,
+            ci,
+        )
+
+        payload = {
+            "name": name,
+            "rut": rut,
+            "email": email,
+            "phone": phone,
+            "address": address,
+            "answers": answers,
+            "scales": scales,
+            "total": total,
+            "verdict": verdict,
+            "ci": ci,
+            "ip": ip,
+            "ua": ua,
+        }
+        send_result_email(payload)
+
+        body = render_template_string(
+            """
+            <h2>Resultado del test psicológico</h2>
+            <p><strong>Postulante:</strong> {{ name or "Sin nombre" }}</p>
+            <p><strong>Puntaje total:</strong> {{ "%.1f"|format(total) }} / 100</p>
+            <p><strong>Dictamen general:</strong> {{ verdict }}</p>
+            <p><strong>Índice de consistencia (CI):</strong> {{ "%.0f"|format(ci) }} / 100</p>
+
+            <h3>Subescalas</h3>
+            <div class="grid">
+            {% for code, label in scale_labels.items() %}
+              <div class="card">
+                <p><strong>{{ label }}</strong></p>
+                <p>{{ "%.1f"|format(scales[code]) }} / 100</p>
+              </div>
+            {% endfor %}
+            </div>
+
+            {% if flags %}
+            <h3>Observaciones relevantes</h3>
+            <ul>
+            {% for f in flags %}
+              <li>{{ f }}</li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+
+            <p>Estos resultados son referenciales y deben ser complementados con entrevista y evaluación profesional.</p>
+
+            <p><a href="{{ url_for('index') }}">Volver al inicio</a></p>
+            """,
+            name=name,
+            total=total,
+            verdict=verdict,
+            ci=ci,
+            scales=scales,
+            flags=flags,
+            scale_labels=SCALE_LABELS,
+        )
+
+        return render_template_string(
+            BASE,
+            title="Resultado Test Bomberos",
+            header="Resultados del Test Psicológico para Postulantes a Bomberos",
+            body=body,
+        )
+
+    # GET
+    body = render_template_string(
+        """
+        <h2>Evaluación psicológica orientativa para postulantes a Bomberos</h2>
+        <p>Este instrumento busca apoyar el proceso de selección, evaluando aspectos de tolerancia al estrés, control de impulsos, trabajo en equipo, regulación emocional y autocuidado.</p>
+
+        <form method="post">
+          <fieldset>
+            <legend>Datos del postulante</legend>
+            <label>Nombre completo
+              <input type="text" name="name" required>
+            </label>
+            <label>RUT
+              <input type="text" name="rut" required>
+            </label>
+            <label>Correo electrónico
+              <input type="email" name="email" required>
+            </label>
+            <label>Teléfono
+              <input type="tel" name="phone">
+            </label>
+            <label>Dirección
+              <input type="text" name="address">
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Responda las siguientes afirmaciones</legend>
+            <p>Marque según cuánto se acerca cada frase a su forma habitual de actuar:</p>
+            <ul style="font-size:14px;">
+              <li>1 = Nunca</li>
+              <li>2 = Rara vez</li>
+              <li>3 = A veces</li>
+              <li>4 = Frecuentemente</li>
+              <li>5 = Siempre</li>
+            </ul>
+
+            {% for q in questions %}
+              <div class="card">
+                <p><strong>{{ q.id }}.</strong> {{ q.text }}</p>
+                <label><input type="radio" name="q{{ q.id }}" value="1" required> 1 - Nunca</label>
+                <label><input type="radio" name="q{{ q.id }}" value="2"> 2 - Rara vez</label>
+                <label><input type="radio" name="q{{ q.id }}" value="3"> 3 - A veces</label>
+                <label><input type="radio" name="q{{ q.id }}" value="4"> 4 - Frecuentemente</label>
+                <label><input type="radio" name="q{{ q.id }}" value="5"> 5 - Siempre</label>
+              </div>
+            {% endfor %}
+          </fieldset>
+
+          <p style="margin-top:16px;">
+            <button type="submit" class="btn">Enviar respuestas</button>
+          </p>
+        </form>
+        """,
+        questions=QUESTIONS,
+    )
+
+    return render_template_string(
+        BASE,
+        title="Test Psicológico Bomberos",
+        header="Test Psicológico para Postulantes a Bomberos",
+        body=body,
+    )
+
+# =======================
+# ADMIN
+# =======================
+def require_admin():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        pwd = request.form.get("password") or ""
+        if pwd == ADMIN_PASSWORD:
+            session["admin"] = True
+            return redirect(url_for("admin_panel"))
+        else:
+            error = "Contraseña incorrecta."
+    else:
+        error = None
+
+    body = render_template_string(
+        """
+        <h2>Acceso administración</h2>
+        {% if error %}
+          <p style="color:red;">{{ error }}</p>
+        {% endif %}
+        <form method="post">
+          <label>Contraseña
+            <input type="password" name="password" required>
+          </label>
+          <p style="margin-top:12px;">
+            <button type="submit" class="btn">Ingresar</button>
+          </p>
+        </form>
+        """,
+        error=error,
+    )
+
+    return render_template_string(
+        BASE,
+        title="Admin Test Bomberos",
+        header="Panel de administración",
+        body=body,
+    )
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin")
+def admin_panel():
+    guard = require_admin()
+    if guard:
+        return guard
+
+    rows = fetch_all()
+    body = render_template_string(
+        """
+        <h2>Resultados registrados</h2>
+        <p><a href="{{ url_for('admin_export') }}">Descargar CSV</a> | <a href="{{ url_for('admin_logout') }}">Cerrar sesión</a></p>
+        {% if not rows %}
+          <p>No hay respuestas registradas aún.</p>
+        {% else %}
+          <table border="1" cellpadding="4" cellspacing="0">
+            <tr>
+              <th>ID</th>
+              <th>Fecha (UTC)</th>
+              <th>Nombre</th>
+              <th>RUT</th>
+              <th>Total</th>
+              <th>Dictamen</th>
+              <th>Ver</th>
+            </tr>
+            {% for r in rows %}
+              <tr>
+                <td>{{ r[0] }}</td>
+                <td>{{ r[1] }}</td>
+                <td>{{ r[4] }}</td>
+                <td>{{ r[5] }}</td>
+                <td>{{ "%.1f"|format(r[12]) }}</td>
+                <td>{{ r[13] }}</td>
+                <td><a href="{{ url_for('admin_view', rid=r[0]) }}">Detalle</a></td>
+              </tr>
+            {% endfor %}
+          </table>
+        {% endif %}
+        """,
+        rows=rows,
+    )
+
+    return render_template_string(
+        BASE,
+        title="Admin Test Bomberos",
+        header="Panel de administración",
+        body=body,
+    )
+
+
+@app.route("/admin/view/<int:rid>")
+def admin_view(rid):
+    guard = require_admin()
+    if guard:
+        return guard
+
+    row = fetch_one(rid)
+    if not row:
+        abort(404)
+
+    (
+        _id,
+        created_at,
+        ip,
+        ua,
+        name,
+        rut,
+        email,
+        phone,
+        address,
+        answers_json,
+        scales_json,
+        total,
+        verdict,
+        ci,
+    ) = row
+
+    answers = json.loads(answers_json)
+    scales = json.loads(scales_json)
+
+    body = render_template_string(
+        """
+        <h2>Detalle respuesta #{{ rid }}</h2>
+        <p><a href="{{ url_for('admin_panel') }}">Volver</a></p>
+
+        <h3>Datos generales</h3>
+        <ul>
+          <li><strong>Fecha (UTC):</strong> {{ created_at }}</li>
+          <li><strong>Nombre:</strong> {{ name }}</li>
+          <li><strong>RUT:</strong> {{ rut }}</li>
+          <li><strong>Correo:</strong> {{ email }}</li>
+          <li><strong>Teléfono:</strong> {{ phone }}</li>
+          <li><strong>Dirección:</strong> {{ address }}</li>
+          <li><strong>IP:</strong> {{ ip }}</li>
+          <li><strong>User-Agent:</strong> {{ ua }}</li>
+        </ul>
+
+        <h3>Resultados</h3>
+        <ul>
+          <li><strong>Puntaje total:</strong> {{ "%.1f"|format(total) }} / 100</li>
+          <li><strong>Dictamen:</strong> {{ verdict }}</li>
+          <li><strong>Consistencia (CI):</strong> {{ "%.0f"|format(ci) }} / 100</li>
+        </ul>
+
+        <h3>Subescalas</h3>
+        <ul>
+        {% for code, label in scale_labels.items() %}
+          <li><strong>{{ label }} ({{ code }}):</strong> {{ "%.1f"|format(scales[code]) }} / 100</li>
+        {% endfor %}
+        </ul>
+
+        <h3>Respuestas</h3>
+        <ol>
+        {% for q in questions %}
+          <li>
+            {{ q.text }}<br>
+            Respuesta: {{ answers[str(q.id)] }}
+          </li>
+        {% endfor %}
+        </ol>
+        """,
+        rid=rid,
+        created_at=created_at,
+        name=name,
+        rut=rut,
+        email=email,
+        phone=phone,
+        address=address,
+        ip=ip,
+        ua=ua,
+        total=total,
+        verdict=verdict,
+        ci=ci,
+        scales=scales,
+        scale_labels=SCALE_LABELS,
+        questions=QUESTIONS,
+        answers=answers,
+    )
+
+    return render_template_string(
+        BASE,
+        title=f"Detalle #{rid}",
+        header=f"Detalle respuesta #{rid}",
+        body=body,
+    )
+
+
+@app.route("/admin/export")
+def admin_export():
+    guard = require_admin()
+    if guard:
+        return guard
+
+    rows = fetch_all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "created_at",
+            "ip",
+            "user_agent",
+            "name",
+            "rut",
+            "email",
+            "phone",
+            "address",
+            "answers_json",
+            "scales_json",
+            "total",
+            "verdict",
+            "ci",
+        ]
+    )
+    for r in rows:
+        writer.writerow(r)
+
+    resp = make_response(output.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = "attachment; filename=responses.csv"
+    return resp
+
+
+# =======================
+# MAIN
+# =======================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
