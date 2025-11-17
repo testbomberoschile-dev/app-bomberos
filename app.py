@@ -705,7 +705,9 @@ def admin_view(rid: int):
         ci,
     ) = row
 
-    answers = json.loads(answers_json)
+    answers_raw = json.loads(answers_json)
+    # claves como int para que Jinja pueda hacer answers[q.id]
+    answers = {int(k): v for k, v in answers_raw.items()}
     scales = json.loads(scales_json)
 
     body = render_template_string(
@@ -744,7 +746,7 @@ def admin_view(rid: int):
         {% for q in questions %}
           <li>
             {{ q.text }}<br>
-            Respuesta: {{ answers[str(q.id)] }}
+            Respuesta: {{ answers[q.id] }}
           </li>
         {% endfor %}
         </ol>
