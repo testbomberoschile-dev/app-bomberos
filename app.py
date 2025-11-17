@@ -248,8 +248,11 @@ def send_result_email(payload: dict):
 # UI BASE
 # =======================
 BASE = """
-<!doctype html><html lang="es"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title }}</title>
 <style>
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:#f6f7fb;}
@@ -262,4 +265,18 @@ h1{margin:0;font-size:20px}
 .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px}
 .btn{background:#1d4ed8;color:#fff;border:none;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:16px}
 footer{color:#6b7280;font-size:12px;margin-top:24px}
-a{color:#1d4евег
+a{color:#1d4ed8;text-decoration:none}
+input[type=text], input[type=email], input[type=tel]{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;margin:6px 0;}
+fieldset{border:1px solid #eee;border-radius:12px;padding:12px}
+legend{padding:0 8px;color:#374151}
+</style>
+</head>
+<body>
+<header><h1>{{ header }}</h1></header>
+<main>
+{{ body|safe }}
+<footer><p><strong>Uso responsable:</strong> Herramienta orientativa. No reemplaza evaluación profesional.</p></footer>
+</main>
+</body>
+</html>
+"""
