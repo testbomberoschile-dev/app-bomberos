@@ -171,7 +171,8 @@ def save_response(
     con.close()
 
 
-def fetch_all():
+def fetch_all_full():
+    """Para export y detalle: todas las columnas."""
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute(
@@ -182,7 +183,22 @@ def fetch_all():
         ORDER BY id DESC
         """
     )
-    # 👇 AQUÍ ESTABA EL ERROR: ahora usamos cur.fetchall()
+    rows = cur.fetchall()
+    con.close()
+    return rows
+
+
+def fetch_all_summary():
+    """Para la tabla simple del panel admin (evita problemas de índices)."""
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute(
+        """
+        SELECT id, created_at, name, rut, total, verdict
+        FROM responses
+        ORDER BY id DESC
+        """
+    )
     rows = cur.fetchall()
     con.close()
     return rows
@@ -636,7 +652,7 @@ def admin_panel():
     if guard:
         return guard
 
-    rows = fetch_all()
+    rows = fetch_all_summary()
     body = render_template_string(
         """
         <h2>Resultados registrados</h2>
@@ -658,10 +674,10 @@ def admin_panel():
               <tr>
                 <td>{{ r[0] }}</td>
                 <td>{{ r[1] }}</td>
-                <td>{{ r[4] }}</td>
+                <td>{{ r[2] }}</td>
+                <td>{{ r[3] }}</td>
+                <td>{{ "%.1f"|format(r[4]) }}</td>
                 <td>{{ r[5] }}</td>
-                <td>{{ "%.1f"|format(r[12]) }}</td>
-                <td>{{ r[13] }}</td>
                 <td><a href="{{ url_for('admin_view', rid=r[0]) }}">Detalle</a></td>
               </tr>
             {% endfor %}
@@ -707,7 +723,6 @@ def admin_view(rid: int):
     ) = row
 
     answers_raw = json.loads(answers_json)
-    # claves como int para que Jinja pueda hacer answers[q.id]
     answers = {int(k): v for k, v in answers_raw.items()}
     scales = json.loads(scales_json)
 
@@ -784,7 +799,7 @@ def admin_export():
     if guard:
         return guard
 
-    rows = fetch_all()
+    rows = fetch_all_full()
 
     output = io.StringIO()
     writer = csv.writer(output)
