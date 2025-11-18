@@ -182,7 +182,8 @@ def fetch_all():
         ORDER BY id DESC
         """
     )
-    rows = con.fetchall()
+    # 👇 AQUÍ ESTABA EL ERROR: ahora usamos cur.fetchall()
+    rows = cur.fetchall()
     con.close()
     return rows
 
